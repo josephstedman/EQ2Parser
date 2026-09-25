@@ -785,18 +785,25 @@ public sealed partial class MainParseViewModel : ObservableObject
     {
         if (selected.Count == 0)
             return;
-        List<CorrelatedEncounter> fights = [.. selected
-            .Where(n => n.IsFight)
-            .Select(n => n.Fight)
-            .OfType<CorrelatedEncounter>()
-            .Distinct()
-            .OrderBy(f => f.StartTime)];
+        // StartTime/Zone walk the fight's live source list, which the pump
+        // appends to when another log merges in — snapshot under the lock.
+        List<CorrelatedEncounter> fights;
+        string zone;
+        lock (manager.Sync)
+        {
+            fights = [.. selected
+                .Where(n => n.IsFight)
+                .Select(n => n.Fight)
+                .OfType<CorrelatedEncounter>()
+                .Distinct()
+                .OrderBy(f => f.StartTime)];
+            zone = string.Join(" / ", fights.Select(f => f.Zone).Distinct(StringComparer.OrdinalIgnoreCase));
+        }
         if (fights.Count < 2)
         {
             SelectNode(focus ?? selected[^1]);
             return;
         }
-        var zone = string.Join(" / ", fights.Select(f => f.Zone).Distinct(StringComparer.OrdinalIgnoreCase));
         _pinnedFight = new AggregateFights(zone, SelectionLabel, fights);
         FollowLive = false;
         FollowSelectionInOverlay();
